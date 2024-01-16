@@ -1,0 +1,71 @@
+import json
+import re
+from nltk.tokenize import word_tokenize
+from collections import defaultdict
+from sklearn.model_selection import train_test_split
+# Import machine learning libraries (Assuming TensorFlow)
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
+
+def tokenize(x):
+    # Modify this function as needed to tokenize network activity data
+    x = re.sub(r'([\\\'".!?,-/])', r' \1 ', x)
+    x = re.sub(r'(\d+)', r' \1 ', x)
+    return word_tokenize(x.lower())
+
+def get_frequency_token_vocab(list_tokenized_activities, vocab=defaultdict(int)):
+    for activity in list_tokenized_activities:
+        for token in activity:
+            vocab[token] += 1
+    return vocab
+
+def get_mapping_dict(vocab, cutoff=10):
+    i = 1
+    word_freq = [(k, v) for k, v in vocab.items()]
+    word_freq.sort(key=lambda x: -x[1])
+    mapping = {}
+    for token, freq in word_freq:
+        if freq >= cutoff:
+            mapping[token] = i
+            i += 1
+    return mapping
+
+# Loading network activity data with labels indicating normal and malicious
+network_data = json.load(open("network_activity_data.json", 'r'))
+
+# Extract features and labels
+features, labels = list(zip(*network_data))
+
+# Tokenizing network activities
+tokenized_activities = [tokenize(activity) for activity in features]
+
+# To build a vocabulary and mapping
+vocab1 = get_frequency_token_vocab(tokenized_activities)
+mapping = get_mapping_dict(vocab1)
+
+# Converting activities to numerical format
+numerical_activities = [[mapping.get(token, 0) for token in activity] for activity in tokenized_activities]
+
+# Splitting data into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(numerical_activities, labels, test_size=0.2)
+
+# Defining a simple neural network model for classification
+model = Sequential([
+    Dense(128, activation='relu', input_shape=(len(mapping),)),
+    Dropout(0.5),
+    Dense(64, activation='relu'),
+    Dropout(0.5),
+    Dense(1, activation='sigmoid')
+])
+
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+# Training the model
+model.fit(X_train, y_train, epochs=10, validation_data=(X_test, y_test))
+
+# Evaluating the model
+test_loss, test_accuracy = model.evaluate(X_test, y_test)
+print(f"Test Accuracy: {test_accuracy}")
+
+# Saving the model
+model.save("network_activity_classifier.h5")
